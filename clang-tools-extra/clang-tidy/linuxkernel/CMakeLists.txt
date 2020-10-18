@@ -5,6 +5,7 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_library(clangTidyLinuxKernelModule
   LinuxKernelTidyModule.cpp
+  LocalLocksCheck.cpp
   MustCheckErrsCheck.cpp
 
   LINK_LIBS

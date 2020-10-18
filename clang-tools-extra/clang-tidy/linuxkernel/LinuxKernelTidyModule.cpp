@@ -9,6 +9,7 @@
 #include "../ClangTidy.h"
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
+#include "LocalLocksCheck.h"
 #include "MustCheckErrsCheck.h"
 
 namespace clang {
@@ -19,6 +20,8 @@ namespace linuxkernel {
 class LinuxKernelModule : public ClangTidyModule {
 public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
+    CheckFactories.registerCheck<LocalLocksCheck>(
+        "linuxkernel-local-locks");
     CheckFactories.registerCheck<MustCheckErrsCheck>(
         "linuxkernel-must-check-errs");
   }

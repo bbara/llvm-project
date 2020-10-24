@@ -45,7 +45,7 @@ public:
   void MacroExpands(const Token &MacroNameTok, const MacroDefinition &MD,
                     SourceRange Range, const MacroArgs *Args) override {
     /* store all calls from local file to context-less lock functions */
-    if (!SM->isLocalSourceLocation(MacroNameTok.getLocation())) {
+    if (!SM->isInMainFile(MacroNameTok.getLocation())) {
       return;
     }
     const auto *Identifier = MacroNameTok.getIdentifierInfo();
@@ -66,7 +66,7 @@ public:
     /* find an include and check if local_locks is already included.
      * the include should be used as location for the local lock header.
      */
-    if (!SM->isLocalSourceLocation(HashLoc)) {
+    if (!SM->isInMainFile(HashLoc)) {
       return;
     }
     Check->setIncludeLoc(HashLoc);
@@ -200,7 +200,7 @@ void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
   this->StructToFieldMap[StructName] = FieldName;
 
   /* do not replace stuff in not local location */
-  if (!this->SM->isLocalSourceLocation(FunDecl->getLocation())) {
+  if (!this->SM->isInMainFile(FunDecl->getLocation())) {
     return;
   }
 

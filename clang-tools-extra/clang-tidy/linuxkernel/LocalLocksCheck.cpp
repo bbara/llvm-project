@@ -32,10 +32,10 @@ static std::map<std::string, std::tuple<std::string, bool>> const LUT = {
     {"local_irq_restore", {"local_unlock_irqrestore", true}},
 };
 
-static bool const FixHeaderActive = false;
-static bool const FixInitActive = false;
-static bool const FixFieldActive = false;
-static bool const FixFunctionsActive = false;
+static bool const FixHeaderActive = true;
+static bool const FixInitActive = true;
+static bool const FixFieldActive = true;
+static bool const FixFunctionsActive = true;
 
 class LocalLocksPPCallbacks : public PPCallbacks {
 public:
@@ -104,7 +104,7 @@ void LocalLocksCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(CallerFn, this);
 
   /* TODO: in case of a forward decl, we don't get the complete easily */
-  auto StructDecl = recordDecl(isDefinition(), isStruct()).bind("def");
+  auto StructDecl = recordDecl(hasDescendant(expr()), isStruct()).bind("def");
   Finder->addMatcher(StructDecl, this);
 }
 
@@ -156,6 +156,9 @@ void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *StructDecl = Result.Nodes.getNodeAs<RecordDecl>("def");
   if (StructDecl) {
     auto StructName = StructDecl->getNameAsString();
+    if (StructName == "clock_event_device") {
+      int a = 1;
+    }
     this->StructDecls[StructName] = StructDecl;
   }
   const auto *FunDecl = Result.Nodes.getNodeAs<FunctionDecl>("funDecl");

@@ -13,6 +13,7 @@
 #include "clang/Lex/Preprocessor.h"
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/TokenKinds.h>
 
 using namespace clang::ast_matchers;
@@ -38,11 +39,15 @@ static bool const FixFunctionsActive = false;
 
 class LocalLocksPPCallbacks : public PPCallbacks {
 public:
-  LocalLocksPPCallbacks(LocalLocksCheck *Check) : Check(Check) {}
+  LocalLocksPPCallbacks(LocalLocksCheck *Check, SourceManager const &SM)
+      : Check(Check), SM(&SM) {}
 
   void MacroExpands(const Token &MacroNameTok, const MacroDefinition &MD,
                     SourceRange Range, const MacroArgs *Args) override {
-    /* store all calls to context-less lock functions */
+    /* store all calls from local file to context-less lock functions */
+    if (!SM->isLocalSourceLocation(MacroNameTok.getLocation())) {
+      return;
+    }
     const auto *Identifier = MacroNameTok.getIdentifierInfo();
     const auto LUTEntry = LUT.find(Identifier->getNameStart());
     if (LUTEntry != LUT.end()) {
@@ -61,11 +66,9 @@ public:
     /* find an include and check if local_locks is already included.
      * the include should be used as location for the local lock header.
      */
-    /* TODO: we want to find the correct position for the local lock header,
-     * but since everything gets expanded and I can't find a possibility to
-     * differ between "in expansion" or actually "in file", just take the first.
-     * isFileID() is not working, is this wanted?
-     */
+    if (!SM->isLocalSourceLocation(HashLoc)) {
+      return;
+    }
     Check->setIncludeLoc(HashLoc);
     if (FileName.equals("linux/local_lock.h")) {
       Check->setAlreadyIncluded();
@@ -74,23 +77,22 @@ public:
 
 private:
   LocalLocksCheck *Check;
+  SourceManager const *SM;
 };
 } // namespace
 
 void LocalLocksCheck::registerPPCallbacks(const SourceManager &SM,
                                           Preprocessor *PP,
                                           Preprocessor *ModuleExpanderPP) {
-  PP->addPPCallbacks(std::make_unique<LocalLocksPPCallbacks>(this));
+  PP->addPPCallbacks(std::make_unique<LocalLocksPPCallbacks>(this, SM));
+  this->SM = &SM;
 }
 
 void LocalLocksCheck::addLockCall(SourceLocation Loc, std::string Original) {
   this->Locks[Loc] = Original;
 }
 
-void LocalLocksCheck::setIncludeLoc(SourceLocation Loc) {
-  if (IncludeLoc.isInvalid())
-    IncludeLoc = Loc;
-}
+void LocalLocksCheck::setIncludeLoc(SourceLocation Loc) { IncludeLoc = Loc; }
 
 void LocalLocksCheck::setAlreadyIncluded() { AlreadyIncluded = true; }
 
@@ -129,6 +131,7 @@ std::string LocalLocksCheck::diagMissingField(RecordDecl const *Rec) {
   diag(Rec->getBeginLoc(), "missing local lock field") << Hint;
   return "local_lock";
 }
+
 void LocalLocksCheck::diagLockCall(std::string Ctx, std::string Field,
                                    SourceLocation Loc, std::string Original) {
   const auto LUTEntry = LUT.at(Original);
@@ -167,7 +170,8 @@ void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
 
   /* check if the context has already a local lock field */
   const auto *StructDef = CtxType->getDefinition();
-  if (!StructDef) return;
+  if (!StructDef)
+    return;
   const auto StructName = CtxType->getNameAsString();
   const auto FieldIter = this->StructToFieldMap.find(StructName);
   std::string FieldName;
@@ -178,6 +182,11 @@ void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
     FieldName = diagMissingField(StructDef);
   }
   this->StructToFieldMap[StructName] = FieldName;
+
+  /* do not replace stuff in not local location */
+  if (!this->SM->isLocalSourceLocation(FunDecl->getLocation())) {
+    return;
+  }
 
   /* context(s) used in file, but function has no respective parameter */
   auto Iter = this->Locks.begin();

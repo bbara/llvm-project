@@ -12,6 +12,7 @@
 #include "../ClangTidyCheck.h"
 #include <clang/Basic/IdentifierTable.h>
 #include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/SourceManager.h>
 
 namespace clang {
 namespace tidy {
@@ -53,6 +54,7 @@ private:
   std::map<std::string, std::string> StructToFieldMap;
   SourceLocation IncludeLoc;
   bool AlreadyIncluded;
+  SourceManager const *SM;
 };
 
 } // namespace linuxkernel

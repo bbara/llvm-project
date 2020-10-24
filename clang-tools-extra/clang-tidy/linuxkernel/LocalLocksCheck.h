@@ -51,6 +51,7 @@ private:
                     std::string Original);
 
   std::map<SourceLocation, std::string> Locks;
+  std::map<std::string, RecordDecl const *> StructDecls;
   std::map<std::string, std::string> StructToFieldMap;
   SourceLocation IncludeLoc;
   bool AlreadyIncluded;

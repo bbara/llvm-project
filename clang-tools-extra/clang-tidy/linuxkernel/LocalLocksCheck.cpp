@@ -102,6 +102,10 @@ void LocalLocksCheck::registerMatchers(MatchFinder *Finder) {
   auto Param = parmVarDecl(hasType(pointsTo(StructParam))).bind("name");
   auto CallerFn = functionDecl(hasAnyParameter(Param)).bind("funDecl");
   Finder->addMatcher(CallerFn, this);
+
+  /* TODO: in case of a forward decl, we don't get the complete easily */
+  auto StructDecl = recordDecl(isDefinition(), isStruct()).bind("def");
+  Finder->addMatcher(StructDecl, this);
 }
 
 void LocalLocksCheck::diagMissingHeader(SourceLocation const Loc) {
@@ -149,6 +153,11 @@ void LocalLocksCheck::diagLockCall(std::string Ctx, std::string Field,
 }
 
 void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
+  const auto *StructDecl = Result.Nodes.getNodeAs<RecordDecl>("def");
+  if (StructDecl) {
+    auto StructName = StructDecl->getNameAsString();
+    this->StructDecls[StructName] = StructDecl;
+  }
   const auto *FunDecl = Result.Nodes.getNodeAs<FunctionDecl>("funDecl");
   const auto *CtxType = Result.Nodes.getNodeAs<RecordDecl>("struct");
   if (this->Locks.empty() || !FunDecl || !CtxType)
@@ -173,6 +182,13 @@ void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
   if (!StructDef)
     return;
   const auto StructName = CtxType->getNameAsString();
+
+  /* workaround: struct forward decls doesn't help us */
+  const auto StructDefIter = this->StructDecls.find(StructName);
+  if (StructDefIter == this->StructDecls.end())
+    return;
+  StructDef = StructDefIter->second;
+
   const auto FieldIter = this->StructToFieldMap.find(StructName);
   std::string FieldName;
   if (FieldIter == this->StructToFieldMap.end()) {

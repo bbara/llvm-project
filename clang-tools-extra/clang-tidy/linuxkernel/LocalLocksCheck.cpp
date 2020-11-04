@@ -66,12 +66,10 @@ public:
     /* find an include and check if local_locks is already included.
      * the include should be used as location for the local lock header.
      */
-    if (!SM->isInMainFile(HashLoc)) {
-      return;
-    }
-    Check->setIncludeLoc(HashLoc);
+    auto FileID = SM->getFileID(HashLoc);
+    Check->setIncludeLoc(FileID, HashLoc);
     if (FileName.equals("linux/local_lock.h")) {
-      Check->setAlreadyIncluded();
+      Check->setAlreadyIncluded(FileID);
     }
   }
 
@@ -92,9 +90,13 @@ void LocalLocksCheck::addLockCall(SourceLocation Loc, std::string Original) {
   this->Locks[Loc] = Original;
 }
 
-void LocalLocksCheck::setIncludeLoc(SourceLocation Loc) { IncludeLoc = Loc; }
+void LocalLocksCheck::setIncludeLoc(FileID FileID, SourceLocation Loc) {
+  this->IncludeLoc[FileID] = Loc;
+}
 
-void LocalLocksCheck::setAlreadyIncluded() { AlreadyIncluded = true; }
+void LocalLocksCheck::setAlreadyIncluded(FileID FileID) {
+  this->AlreadyIncluded[FileID] = true;
+}
 
 void LocalLocksCheck::registerMatchers(MatchFinder *Finder) {
   /* a struct pointer in the caller function's params can be used as context */
@@ -146,7 +148,7 @@ void LocalLocksCheck::diagLockCall(std::string Ctx, std::string Field,
   const auto Range = SourceRange(Loc, Loc.getLocWithOffset(Length));
   FixItHint Hint;
   if (FixFunctionsActive) {
-    auto Replacement = ReplFun + "(" + Ctx + "->" + Field + Optional;
+    auto Replacement = ReplFun + "(&" + Ctx + "->" + Field + Optional;
     Hint = FixItHint::CreateReplacement(Range, Replacement);
   }
   diag(Loc, "'%0' can be used") << ReplFun << Hint;
@@ -156,9 +158,6 @@ void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *StructDecl = Result.Nodes.getNodeAs<RecordDecl>("def");
   if (StructDecl) {
     auto StructName = StructDecl->getNameAsString();
-    if (StructName == "clock_event_device") {
-      int a = 1;
-    }
     this->StructDecls[StructName] = StructDecl;
   }
   const auto *FunDecl = Result.Nodes.getNodeAs<FunctionDecl>("funDecl");
@@ -175,9 +174,11 @@ void LocalLocksCheck::check(const MatchFinder::MatchResult &Result) {
   }
 
   /* ensure that local lock header is included, but only once */
-  if (!this->AlreadyIncluded && this->IncludeLoc.isValid()) {
-    diagMissingHeader(this->IncludeLoc);
-    setAlreadyIncluded();
+  auto FileID = this->SM->getFileID(StructDecl->getBeginLoc());
+  if (FileID.isInvalid() && !this->AlreadyIncluded[FileID] &&
+      this->IncludeLoc[FileID].isValid()) {
+    diagMissingHeader(this->IncludeLoc[FileID]);
+    setAlreadyIncluded(FileID);
   }
 
   /* check if the context has already a local lock field */

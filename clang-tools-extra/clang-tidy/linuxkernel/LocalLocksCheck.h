@@ -33,15 +33,15 @@ namespace linuxkernel {
 class LocalLocksCheck : public ClangTidyCheck {
 public:
   LocalLocksCheck(StringRef Name, ClangTidyContext *Context)
-      : ClangTidyCheck(Name, Context), AlreadyIncluded(false) {}
+      : ClangTidyCheck(Name, Context) {}
   void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
                            Preprocessor *ModuleExpanderPP) override;
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
   void addLockCall(SourceLocation Loc, std::string Original);
-  void setIncludeLoc(SourceLocation Loc);
-  void setAlreadyIncluded();
+  void setIncludeLoc(FileID FileID, SourceLocation Loc);
+  void setAlreadyIncluded(FileID FileID);
 
 private:
   void diagMissingHeader(SourceLocation const Loc);
@@ -53,8 +53,8 @@ private:
   std::map<SourceLocation, std::string> Locks;
   std::map<std::string, RecordDecl const *> StructDecls;
   std::map<std::string, std::string> StructToFieldMap;
-  SourceLocation IncludeLoc;
-  bool AlreadyIncluded;
+  std::map<FileID, SourceLocation> IncludeLoc;
+  std::map<FileID, bool> AlreadyIncluded;
   SourceManager const *SM;
 };
 
